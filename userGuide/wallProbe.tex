@@ -1,0 +1,98 @@
+\documentclass{article}
+%% Change fonts to something friendly to acrobat
+%%
+%\usepackage{courier}
+%\usepackage{times,mathptmx}
+%\DeclareMathAlphabet{\bm}{OT1}{ptm}{b}{it}
+\usepackage{graphicx}
+\usepackage{amsmath} % used for extended formula formatting tools
+\usepackage{amssymb}
+\usepackage{theorem}
+\usepackage{euscript}
+
+\topmargin  0.0in
+\headheight  0.15in
+\headsep  0.15in
+\footskip  0.2in
+\textheight 8.45in
+
+\oddsidemargin 0.56in
+\evensidemargin \oddsidemargin
+\textwidth 5.8in
+
+\pagestyle{myheadings}
+\markright{\bf Wall Probe Module User Guide}
+
+\begin{document}
+
+
+\title{Wall Probe Module User Guide.}
+
+\author{ Michael Nucci }
+
+\maketitle
+\section{Wall Probes}
+
+Wall data can be output to files through the use of wall probes. The probes will write out the data at the face center of the face on the nearest viscous boundary ({\tt e.g. viscousWall, wallLaw}) to the wall probe location requested in the {\tt vars} file. The format of the data output is shown below.
+
+\begin{verbatim}
+  <ncycle> <stime> <P> <T> <qdot> <yplus> [ <tau> ] [ <pos> ] <dist> <mass fractions>
+\end{verbatim}
+where:
+\begin{verbatim}
+  <ncycle> is the iteration number of the simulation 
+  <stime> is the simulation time 
+  <P> is the wall pressure
+  <T> is the wall temperature
+  <qdot> is the wall heat flux
+  <yplus> is the y+ value at the wall
+  <tau> is the wall shear stress vector
+  <pos> is the actual position vector of the probe
+  <dist> is the distance between the probed value and the position given in the input file
+  <mass fractions> species mass fractions at the wall (multispecies simulations only)
+\end{verbatim}
+
+\subsection{Wall Probe Module Usage}
+
+To access the wall probe output, load the {\tt wallProbe} module.
+
+\begin{verbatim}
+loadModule: wallProbe
+\end{verbatim}
+
+The {\tt wallProbe} module has several inputs that may be specified inside of the {\tt vars} file.
+
+  \begin{list}{}{}
+
+  \item {\tt wall\_probe\_freq}
+
+    Specifies how frequently the wall probe data should be written out. The default value is {\tt 10}, which writes out data every tenth iteration.
+    
+  \item {\tt wall\_probe}
+  
+    An options list containing probe names and their locations in cartesian coordinates. The units are assumed to be in {\tt m} if none are specified. The names of the probes should be unique, and the associated probe data will be written out to an identically named {\tt .dat} file.
+  
+  \item {\tt wall\_probe\_sticky}
+     
+    A boolean that determines if the wall probe should search for a new closest face each time that the probe values are calculated. The default value is {\tt 1} which results in a \textit{sticky} probe, meaning that the probe will stick to the face it chose at the beginning of the simulation. This variable only has an effect for simulations involving grid motion.
+    
+  \end{list}
+
+An example input for a simulation using wall probes is shown below. In this example the wall probe output will be written to {\tt wprobe1.dat} and {\tt wprobe2.dat} respectively.
+
+\begin{verbatim}
+	// wall probe setup
+	wall_probe_freq: 5
+	wall_probe_sticky: 1
+	wall_probe: <wprobe1=[0,0,0], wprobe2=[1,0,0]>
+\end{verbatim}
+
+
+\clearpage
+
+
+\end{document}
+
+
+
+

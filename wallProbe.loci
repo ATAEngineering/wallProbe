@@ -1,0 +1,338 @@
+// Copyright (C) 2019, ATA Engineering, Inc.
+// 
+// This program is free software; you can redistribute it and/or
+// modify it under the terms of the GNU Lesser General Public
+// License as published by the Free Software Foundation; either
+// version 3 of the License, or (at your option) any later version.
+// 
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+// Lesser General Public License for more details.
+// 
+// You should have received a copy of the GNU Lesser General Public License
+// along with this program; if not, write to the Free Software Foundation,
+// Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
+
+#include <Loci.h>
+$include "chem.lh"
+#include <iostream>
+
+#include "sciTypes.h"
+
+namespace Loci {
+  extern void register_closing_function(void (*fptr)(int code)) ;
+}
+
+namespace chem {
+
+  $type wall_probe_freq param<int> ;
+  $rule default(wall_probe_freq) { $wall_probe_freq = 10; }
+
+  $type wall_probe_sticky param<bool>;
+  $rule default(wall_probe_sticky) { $wall_probe_sticky = true; }
+
+  // setup constraints for sticky/unsticky probe types
+  $type stickyProbe Constraint;
+  $type unstickyProbe Constraint;
+  $rule constraint(stickyProbe, unstickyProbe <- wall_probe_sticky) {
+    $stickyProbe = $wall_probe_sticky ? ~EMPTY : EMPTY;
+    $unstickyProbe = $wall_probe_sticky ? EMPTY : ~EMPTY;
+  }
+
+  $type wall_probe param<options_list>;
+  $rule optional(wall_probe) {}
+
+  // struct to hold wall probe values
+  struct wall_probe_values {
+    real distance;
+    vect3d position;
+    vect3d tau;
+    real yplus;
+    real wallPressure;
+    real wallTemperature;
+    real qdot;
+    std::vector<real> mf;
+    wall_probe_values() {
+      distance = 1e30;
+      position = vect3d(0, 0, 0);
+      tau = position;
+      yplus = 0;
+      wallPressure = 0;
+      wallTemperature = 0;
+      qdot = 0;
+    }
+  };
+
+  typedef std::vector<wall_probe_values> wall_probe_list ;
+
+  std::ostream &operator<<(std::ostream &s, const wall_probe_values &pl) {
+    s << pl.distance << ' ' << pl.position << ' '
+      << pl.tau << ' ' << pl.yplus  << ' '
+      << pl.wallPressure << ' ' << pl.wallTemperature << ' '
+      << pl.qdot << endl ;
+
+    return s ;
+  }
+
+  std::istream &operator>>(std::istream &s, wall_probe_values &pl) {
+    s >> pl.distance >>  pl.position 
+      >> pl.tau >> pl.yplus 
+      >> pl.wallPressure >> pl.wallTemperature
+      >> pl.qdot  ;
+    return s ;
+  }
+  
+}
+
+namespace Loci {
+
+  // Tell Loci how to deal with wall_probe_values struct
+  class wallProbeSchemaConverter {
+    std::vector<chem::wall_probe_values> &ref ;
+  public:
+   explicit wallProbeSchemaConverter(std::vector<chem::wall_probe_values> &iref)
+       : ref(iref) {}
+   int getSize() const {
+     int sz = 1;
+     for (size_t i = 0; i < ref.size(); ++i) sz += 11 + ref[i].mf.size() + 1;
+     return sz;
+    }
+    void getState(chem::real *buf, int &size) {
+      size = getSize() ;
+      size_t p=0 ;
+
+      buf[p++] = ref.size() ;
+
+      for(size_t i=0;i<ref.size();++i) {
+        buf[p++] = ref[i].distance ;
+        buf[p++] = ref[i].position.x ;
+        buf[p++] = ref[i].position.y ;
+        buf[p++] = ref[i].position.z ;
+        buf[p++] = ref[i].tau.x ;
+        buf[p++] = ref[i].tau.y ;
+        buf[p++] = ref[i].tau.z ;
+        buf[p++] = ref[i].yplus ;
+        buf[p++] = ref[i].wallPressure ;
+        buf[p++] = ref[i].wallTemperature ;
+        buf[p++] = ref[i].qdot ;
+        buf[p++] = ref[i].mf.size() ;
+        for(size_t j=0;j<ref[i].mf.size();++j)
+          buf[p++] = ref[i].mf[j] ;
+      }
+    }
+    void setState(chem::real *buf, int size) {
+      ref.clear() ;
+      int p = 0 ;
+      int sz = int(buf[p++]) ;
+      ref.reserve(sz) ;
+      for(int i=0;i<sz;++i) {
+        chem::wall_probe_values pv ;
+        pv.distance = buf[p++] ;
+        pv.position.x = buf[p++] ;
+        pv.position.y = buf[p++] ;
+        pv.position.z = buf[p++] ;
+        pv.tau.x = buf[p++] ;
+        pv.tau.y = buf[p++] ;
+        pv.tau.z = buf[p++] ;
+        pv.yplus = buf[p++] ;
+        pv.wallPressure = buf[p++] ;
+        pv.wallTemperature = buf[p++] ;
+        pv.qdot = buf[p++] ;
+        int msz = int(buf[p++]) ;
+        pv.mf.reserve(msz) ;
+        for(int j=0;j<msz;++j)
+          pv.mf.push_back(buf[p++]) ;
+        ref.push_back(pv) ;
+      }
+    }
+  } ;
+    
+  template <> struct data_schema_traits<std::vector<chem::wall_probe_values> > {
+    typedef USER_DEFINED_CONVERTER Schema_Converter ;
+    typedef chem::real Converter_Base_Type ;
+    typedef wallProbeSchemaConverter Converter_Type ;
+  } ;
+}
+
+namespace chem {
+
+  // get all the face centers on viscous surfaces
+  $type viscFaceCenter store<vect3d>;
+  $rule pointwise(viscFaceCenter <- facecenter), 
+      constraint(AllViscousBCs, unstickyProbe) {
+    $viscFaceCenter = $facecenter;
+  }
+
+  // store face centers at time t=0 if probes are "sticky"
+  $type facecenter0 store<vect3d>;
+  $rule pointwise(facecenter0{n} <- facecenter{n}, facecenter) {
+    $facecenter0{n} = $facecenter;
+  }
+  $rule pointwise(facecenter0{n,it} <- facecenter), 
+      constraint(facecenter, UNIVERSE{n,it}) {
+    $facecenter0{n,it} = $facecenter;
+  }
+
+  $rule pointwise(viscFaceCenter <- facecenter0), 
+      constraint(AllViscousBCs, stickyProbe) {
+    $viscFaceCenter = $facecenter0;
+  }
+
+  // get a vector of requested wall probe positions
+  $type wallProbePos param<std::vector<vect3d>>;
+  $rule singleton(wallProbePos <- wall_probe) {
+    options_list::option_namelist l = ($wall_probe).getOptionNameList();
+    for (options_list::option_namelist::const_iterator li = l.begin();
+         li != l.end(); ++li) {
+      vect3d val=vect3d(0.,0.,0.) ;
+      ($wall_probe).getOptionUnits(li->c_str(),"m",val,1) ;
+      ($wallProbePos).push_back(val) ;
+    }
+  }
+
+  $type wallProbeList param<wall_probe_list>;
+  $rule unit(wallProbeList <- wallProbePos) {
+    size_t sz = ($wallProbePos).size();
+    wall_probe_list tmp(sz);
+    $wallProbeList = tmp;
+  }
+
+  template <typename T>
+  struct min_wall_probe_list {
+    void operator()(T &r, const T &s) {
+      fatal(r.size() != s.size()) ;
+      for(size_t i=0; i<r.size(); ++i) {
+        if(s[i].distance < r[i].distance)
+          r[i] = s[i] ;
+      }
+    }
+  };
+
+  $rule apply(wallProbeList <- wallProbeList, wallProbePos, viscFaceCenter, 
+      wall_stress, mixture_f, wall_T, wall_p, heatf, yplus_w, facecenter)
+      [min_wall_probe_list]{
+    fatal(($wallProbePos).size() != ($wallProbeList).size()) ;
+    for(size_t i = 0; i < ($wallProbeList).size(); ++i) {
+      const vect3d dr = $viscFaceCenter - $wallProbePos[i];
+      const real dist = dot(dr, dr);
+      if(dist < $wallProbeList[i].distance) {
+        wall_probe_values pv;
+        pv.distance = dist;
+        // facecenter instead of viscFaceCenter to get position in moving grid
+        pv.position = $facecenter;
+        pv.tau = $wall_stress;
+        pv.yplus = $yplus_w;
+        pv.wallPressure = $wall_p;
+        pv.wallTemperature = $wall_T;
+        pv.qdot = $heatf;
+        pv.mf.reserve($*mixture_f.vecSize());
+        for(int k = 0; k < $*mixture_f.vecSize(); ++k) {
+          pv.mf.push_back($mixture_f[k]);
+        }
+        $wallProbeList[i] = pv;
+      }
+    }
+  }
+
+  // determine if wall probes should be output
+  $type do_wall_probe param<bool>;
+  $rule singleton(do_wall_probe{n,it} <- $it{n,it}, ncycle{n}, 
+      wall_probe_freq) {
+    $do_wall_probe{n, it} =
+        ($ncycle{n} % $wall_probe_freq == 0) && ($$it{n, it} == 0);
+  }
+
+  std::vector<ofstream *> wallProbeFiles;
+
+  void LociProbeCloser(int code) {
+    // close any probe files already opened on Loci error
+    if(wallProbeFiles.size() > 0) {
+      for (size_t i = 0; i < wallProbeFiles.size(); ++i) {
+        wallProbeFiles[i]->close();
+        delete wallProbeFiles[i];
+      }
+      wallProbeFiles.clear();
+    }
+  }
+
+  static int wallProbeFileCloser_registered = 0 ;
+  class wallProbeFileCloser {
+   public:
+    wallProbeFileCloser() { 
+      if(wallProbeFileCloser_registered==0) {
+        Loci::register_closing_function(LociProbeCloser);
+        wallProbeFileCloser_registered = 1;
+      }
+    }
+    ~wallProbeFileCloser() {
+      // close any probe files already opened
+      if(wallProbeFiles.size() > 0) {
+        for(size_t i = 0 ; i<wallProbeFiles.size(); ++i) {
+          wallProbeFiles[i]->close();
+          delete wallProbeFiles[i];
+        }
+        wallProbeFiles.clear() ;
+      }
+    }
+  } ;
+
+  $type wallProbeFileManager blackbox<wallProbeFileCloser>;
+  $rule blackbox(wallProbeFileManager),constraint(UNIVERSE) {}
+
+  // output wall probes to files
+  $rule singleton(OUTPUT <- wall_probe, wallProbeList, ncycle, stime, dtmax,
+      wallProbeFileManager, wallProbePos), conditional(do_wall_probe) {
+    $[Once] {
+      options_list::option_namelist l = $wall_probe.getOptionNameList() ;
+      if(wallProbeFiles.size() == 0) { // If files not open, open them
+        size_t i = 0 ;
+        for(options_list::option_namelist::const_iterator li = l.begin();
+            li != l.end(); ++li, ++i) {
+          string filename = *li;
+          filename += ".dat";
+          wallProbeFiles.push_back(new ofstream());
+          if ($ncycle == 0) {
+            wallProbeFiles[i]->open(filename.c_str(), ios::out);
+          } else {
+            wallProbeFiles[i]->open(filename.c_str(), ios::app);
+          }
+          if(wallProbeFiles[i]->fail()) {
+            cerr << "Wall Probe: can't open "<< filename << endl ;
+            continue;
+          }
+          wallProbeFiles[i]->precision(14) ;
+        }
+      }
+      double time = $stime - $dtmax ;
+      size_t i = 0 ;
+      for(options_list::option_namelist::const_iterator li = l.begin();
+          li != l.end(); ++li, ++i) {
+         
+        if(!wallProbeFiles[i]->fail()) {
+          // recalculating distance in case of moving/overset grid
+          vect3d diff = $wallProbeList[i].position - $wallProbePos[i];
+          double distSq = dot(diff, diff);
+          *(wallProbeFiles[i]) << $ncycle << " " << time << " "
+                               << $wallProbeList[i].wallPressure << " "
+                               << $wallProbeList[i].wallTemperature << " "
+                               << $wallProbeList[i].qdot << " "
+                               << $wallProbeList[i].yplus << " "
+                               << $wallProbeList[i].tau << " "
+                               << $wallProbeList[i].position
+                               << sqrt(distSq);
+
+          if($wallProbeList[i].mf.size() > 1) {
+            *(wallProbeFiles[i]) << ' ';
+            for (size_t s = 0; s < $wallProbeList[i].mf.size(); ++s) {
+              *(wallProbeFiles[i]) << $wallProbeList[i].mf[s] << ' ';
+            }
+          }
+          *(wallProbeFiles[i]) << endl;
+        }
+      }
+    }
+  }
+
+}
+
