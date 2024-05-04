@@ -38,12 +38,12 @@ JUNK = *~  core ti_files ii_files rii_files
 
 LIB_OBJS=$(OBJS:.o=_lo.o)
 
-all: $(MODULE_NAME)_m.so DOCS
+all: $(MODULE_NAME)_m.so docs
 
 $(MODULE_NAME)_m.so: $(LIB_OBJS)
 	$(SHARED_LD) $(SHARED_LD_FLAGS) $(MODULE_NAME)_m.so $(LIB_FLAGS) $(LIB_OBJS)
 
-DOCS:
+docs:
 	$(MAKE) -C userGuide all
 
 FRC : 
