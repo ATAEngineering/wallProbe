@@ -6,7 +6,7 @@ echo "LOCI_BASE" $LOCI_BASE
 echo "CHEM_BASE" $CHEM_BASE
 which extract
 which chem
-which latex
-which dvips
-which ps2pdf
-#make docs
+##which latex
+##which dvips
+##which ps2pdf
+##make docs
