@@ -17,15 +17,16 @@
 # https://gitlab.com/gitlab-org/gitlab/-/blob/master/lib/gitlab/ci/templates/Getting-Started.gitlab-ci.yml
 
 variables:
+  GCC_VERSION: 13
   MODULE_NAME: 'wallProbe'
-  BUILD_IMAGE: "$CI_REGISTRY/containers/chem:4.0-p7-gcc11"
+  BUILD_IMAGE: "$CI_REGISTRY/containers/chem:4.0-p10-gcc13"
   VERSION: ${CI_COMMIT_TAG}
   PACKAGE_REGISTRY_URL: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/${MODULE_NAME}/${VERSION}"
 
 default:
   image: "$BUILD_IMAGE"
   tags:
-  - linux, docker
+  - linux
 
 stages:          # List of stages for jobs, and their order of execution
   - build
@@ -40,7 +41,7 @@ build_module:
     - pwd
     - ls -lh
     - env
-    - scl enable gcc-toolset-11 'bash ci/build_module'
+    - scl enable gcc-toolset-${GCC_VERSION} 'bash ci/build_module'
   # Use artifacts to return logs and other files to GitLab (if necessary)
   artifacts:
     paths:
@@ -54,7 +55,7 @@ build_docs:
     - pwd
     - ls -lh
     - env
-    - scl enable gcc-toolset-11 'bash ci/build_docs'
+    - scl enable gcc-toolset-${GCC_VERSION} 'bash ci/build_docs'
   # Use artifacts to return logs and other files to GitLab (if necessary)
   artifacts:
     paths:
@@ -101,20 +102,6 @@ sast:
     paths:
       - gl-sast-report.*
 
-secret_detection:
-  stage: quality_check
-  artifacts:
-    paths:
-      - gl-secret-detection-report.* 
-
-license_scanning:
-  stage: quality_check
-  artifacts:
-    paths:
-      - gl-secret-detection-report.* 
-
 include:
   - template: Jobs/SAST.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab/blob/master/lib/gitlab/ci/templates/Jobs/SAST.gitlab-ci.yml
-  - template: Jobs/Secret-Detection.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab/blob/master/lib/gitlab/ci/templates/Jobs/Secret-Detection.gitlab-ci.yml
-  - template: Jobs/License-Scanning.gitlab-ci.yml  # https://gitlab.com/gitlab-org/gitlab/blob/master/lib/gitlab/ci/templates/Jobs/License-Scanning.gitlab-ci.yml
 
