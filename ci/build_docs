@@ -7,5 +7,4 @@ which dvips
 which ps2pdf
 
 cd userGuide
-ls -lh
 make all
