@@ -6,4 +6,5 @@ which latex
 which dvips
 which ps2pdf
 
-make docs
+cd userGuide
+make all
