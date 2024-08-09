@@ -92,7 +92,7 @@ upload_distribution:
       cp README.md ${MODULE_NAME}-${VERSION}/
       cp *.loci ${MODULE_NAME}-${VERSION}/
       cp Makefile ${MODULE_NAME}-${VERSION}/
-      cp userGuide ${MODULE_NAME}-${VERSION}/
+      cp -r userGuide ${MODULE_NAME}-${VERSION}/
       tar zcvf ${MODULE_NAME}-${VERSION}.tar.gz ${MODULE_NAME}-${VERSION}
       echo $PACKAGE_REGISTRY_URL
       curl --header "JOB-TOKEN: ${CI_JOB_TOKEN}" --upload-file ${MODULE_NAME}-${VERSION}.tar.gz "${PACKAGE_REGISTRY_URL}/${MODULE_NAME}-${VERSION}.tar.gz"
